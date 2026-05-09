@@ -16,9 +16,16 @@ const app  = express();
 const PORT = process.env.PORT || 3000;
 const BASE = 'https://sistematransito.ant.gob.ec/PortalWEB/paginas/clientes';
 
+
+// Ruta explicita por si el static falla
+app.get('/', (req, res) => {
+  res.sendFile(path.join(process.cwd(), 'public', 'index.html'));
+});
+
 app.use(cors());
 app.use(express.json());
-app.use(express.static(path.join(__dirname, 'public')));
+// DESPUÉS — ruta absoluta más robusta:
+app.use(express.static(path.join(process.cwd(), 'public')));
 
 // ── Helpers ───────────────────────────────────────────────────
 
