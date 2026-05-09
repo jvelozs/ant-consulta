@@ -202,96 +202,20 @@ app.get('/api/consulta', async (req, res) => {
       }
     });
 
-    const gridHtml = dec(gridRes.data);
+   const gridHtml = dec(gridRes.data);
     const $        = cheerio.load(gridHtml);
 
-    // Extraer datos del conductor con selectores CSS reales
+    // Extraer datos del conductor
     const persona = parsearPersona($);
 
-    // Detectar URL del endpoint JSON del jqGrid
-    const allScripts = $('script').map((_, el) => $(el).html() || '').get().join('\n');
-    const gridUrlRel = detectarUrlGrid(allScripts);
-
-    let citaciones   = [];
-    let gridUrlFinal = null;
-    let debugGrid    = null;
-
-    // PASO 4 — Llamar al endpoint JSON del jqGrid de citaciones
-    // La URL ya trae todos los params: ps_id_persona, ps_identificacion, ps_opcion, etc.
-    if (gridUrlRel) {
-      gridUrlFinal = `${BASE}/${gridUrlRel.replace(/^\//, '')}`;
-
-      try {
-        const jsonRes = await client.get(gridUrlFinal, {
-          responseType: 'arraybuffer',
-          headers: {
-            'X-Requested-With': 'XMLHttpRequest',
-            'Accept'          : 'application/json, text/javascript, */*',
-            'Referer'         : `${BASE}/clp_grid_citaciones.jsp`
-          }
-        });
-
-        const jsonTxt = dec(jsonRes.data);
-        try {
-          const parsed = JSON.parse(jsonTxt);
-
-          // Mapear filas segun colModel del portal (indices confirmados):
-          // [0]=act [1]=id_factura [2]=ente [3]=secuencia_1(#cit) [4]=secuencia_4(placa)
-          // [5]=documento [6]=fecha_emision [7]=fecha_factura [8]=fecha_vence
-          // [9]=puntos [10]=pagada [11]=anulada [12]=reclamo [13]=capital_factura
-          // [14]=multa [15]=descuento [16]=total [17]=rubro
-          citaciones = (parsed.rows || []).map(row => {
-            const c = row.cell || row;
-            if (Array.isArray(c)) {
-              return {
-                id_factura   : c[1]  || '',
-                entidad      : c[2]  || '',
-                num_citacion : c[3]  || '',
-                placa        : c[4]  || '',
-                fecha_emision: c[6]  || '',
-                puntos_cit   : c[9]  || '',
-                sancion      : c[13] || '',
-                multa        : c[14] || '',
-                total        : c[16] || '',
-                articulo     : c[17] || ''
-              };
-            }
-            return {
-              id_factura   : c.id_factura      || '',
-              entidad      : c.ente            || '',
-              num_citacion : c.secuencia_1     || '',
-              placa        : c.secuencia_4     || '',
-              fecha_emision: c.fecha_emision   || '',
-              puntos_cit   : c.puntos          || '',
-              sancion      : c.capital_factura || '',
-              multa        : c.multa           || '',
-              total        : c.total           || '',
-              articulo     : c.rubro           || ''
-            };
-          });
-
-          debugGrid = jsonTxt.substring(0, 800);
-        } catch (pe) {
-          debugGrid = `JSON parse error: ${pe.message} | raw: ${jsonTxt.substring(0, 400)}`;
-        }
-      } catch (fe) {
-        debugGrid = `Fetch error: ${fe.message}`;
-      }
-    }
-
+    // Respuesta final — solo datos del conductor
     return res.json({
-      success         : true,
-      tipo_consulta   : tipos[tipo],
+      success      : true,
+      tipo_consulta: tipos[tipo],
       identificacion,
-      persona,
-      total_citaciones: citaciones.length,
-      citaciones,
-      _debug: {
-        grid_url_detectada: gridUrlFinal,
-        grid_json_muestra : debugGrid,
-        html_muestra      : gridHtml.substring(0, 3000)
-      }
+      persona
     });
+   
 
   } catch (err) {
     console.error('[ANT API]', err.message);
