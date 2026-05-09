@@ -66,7 +66,11 @@ function parsearPersona($) {
     if (m) p.cedula = m[1];
   });
 
-  // TIPO LICENCIA + VALIDEZ — td.detalle_formulario
+  // LICENCIAS — array (una persona puede tener varias: A, B, C, D, E...)
+  // Cada td.detalle_formulario con "LICENCIA TIPO" es una licencia distinta
+  // HTML: "LICENCIA TIPO: A  / VALIDEZ: 23-01-2025 - 22-01-2030"
+  p.licencias = [];
+
   $('td.detalle_formulario').each((_, td) => {
     const txt = $(td)
       .text()
@@ -74,19 +78,34 @@ function parsearPersona($) {
       .replace(/\s+/g, ' ')
       .trim();
 
-    if (/LICENCIA\s+TIPO/i.test(txt)) {
-      const mTipo = txt.match(/LICENCIA\s+TIPO\s*:\s*([A-Z0-9]+)/i);
-      if (mTipo) p.tipo_licencia = mTipo[1].trim();
+    if (!/LICENCIA\s+TIPO/i.test(txt)) return; // saltar filas vacias o de otro tipo
 
-      // Fecha caducidad = segunda fecha del rango (fin de validez)
-      const mCad = txt.match(/VALIDEZ\s*:\s*[\d\-\/]+\s*-\s*([\d\-\/]+)/i);
-      if (mCad) p.fecha_caducidad = mCad[1].trim();
+    const lic = {};
 
-      // Rango completo de validez
-      const mRango = txt.match(/VALIDEZ\s*:\s*([\d\-\/]+\s*-\s*[\d\-\/]+)/i);
-      if (mRango) p.validez_completa = mRango[1].replace(/\s+/g, ' ').trim();
-    }
+    const mTipo = txt.match(/LICENCIA\s+TIPO\s*:\s*([A-Z0-9]+)/i);
+    if (mTipo) lic.tipo = mTipo[1].trim();
+
+    // Fecha inicio = primera fecha del rango
+    const mIni = txt.match(/VALIDEZ\s*:\s*([\d\-\/]+)\s*-\s*[\d\-\/]+/i);
+    if (mIni) lic.fecha_inicio = mIni[1].trim();
+
+    // Fecha caducidad = segunda fecha del rango
+    const mCad = txt.match(/VALIDEZ\s*:\s*[\d\-\/]+\s*-\s*([\d\-\/]+)/i);
+    if (mCad) lic.fecha_caducidad = mCad[1].trim();
+
+    // Rango completo
+    const mRango = txt.match(/VALIDEZ\s*:\s*([\d\-\/]+\s*-\s*[\d\-\/]+)/i);
+    if (mRango) lic.validez_completa = mRango[1].replace(/\s+/g, ' ').trim();
+
+    if (lic.tipo) p.licencias.push(lic);
   });
+
+  // Atajos de compatibilidad: primera licencia como campos raiz
+  // (por si el frontend los usa directamente)
+  if (p.licencias.length > 0) {
+    p.tipo_licencia   = p.licencias.map(l => l.tipo).join(' / ');
+    p.fecha_caducidad = p.licencias[0].fecha_caducidad || '';
+  }
 
   return p;
 }
