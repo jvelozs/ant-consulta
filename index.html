@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Consulta Licencias ANT - CTE</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;600;700&family=Source+Sans+3:wght@300;400;600&display=swap');
+:root{--navy:#0a1628;--navy-mid:#102040;--gold:#d4a017;--gold-bright:#f0b820;--white:#f0f4f8;--gray:#8aa0b8;--danger:#e05050;--success:#3db87a;--border:rgba(212,160,23,0.25)}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Source Sans 3',sans-serif;background:var(--navy);color:var(--white);min-height:100vh;background-image:radial-gradient(ellipse 80% 50% at 50% -10%,rgba(212,160,23,0.12) 0%,transparent 60%)}
+header{background:linear-gradient(135deg,#060e1e,var(--navy-mid));border-bottom:2px solid var(--gold);padding:16px 28px;display:flex;align-items:center;gap:18px}
+.shield{width:48px;height:48px;background:linear-gradient(145deg,var(--gold),#a07810);clip-path:polygon(50% 0%,100% 20%,100% 70%,50% 100%,0% 70%,0% 20%);display:flex;align-items:center;justify-content:center;font-family:Rajdhani,sans-serif;font-size:16px;font-weight:700;color:var(--navy);flex-shrink:0}
+header h1{font-family:Rajdhani,sans-serif;font-size:19px;font-weight:700;color:var(--gold-bright);letter-spacing:1.5px;text-transform:uppercase}
+header p{font-size:11px;color:var(--gray)}
+main{max-width:860px;margin:0 auto;padding:32px 18px 60px}
+.card{background:rgba(16,32,64,0.85);border:1px solid var(--border);border-top:3px solid var(--gold);border-radius:4px;padding:24px 28px;margin-bottom:22px}
+.stitle{font-family:Rajdhani,sans-serif;font-size:13px;font-weight:700;color:var(--gold);letter-spacing:2px;text-transform:uppercase;margin-bottom:18px;display:flex;align-items:center;gap:8px}
+.stitle::before{content:'';width:3px;height:14px;background:var(--gold);display:inline-block}
+.frow{display:grid;grid-template-columns:170px 1fr auto;gap:12px;align-items:end}
+@media(max-width:600px){.frow{grid-template-columns:1fr}}
+label{display:block;font-size:10px;font-weight:600;color:var(--gray);letter-spacing:1px;text-transform:uppercase;margin-bottom:6px}
+select,input[type=text]{width:100%;background:rgba(10,22,40,0.8);border:1px solid rgba(212,160,23,0.3);border-radius:3px;color:var(--white);padding:9px 13px;font-family:'Source Sans 3',sans-serif;font-size:14px;outline:none;height:40px}
+select:focus,input:focus{border-color:var(--gold)}
+select option{background:var(--navy-mid)}
+.btn{background:linear-gradient(135deg,var(--gold),#a07810);color:var(--navy);border:none;border-radius:3px;padding:0 24px;height:40px;font-family:Rajdhani,sans-serif;font-size:14px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;cursor:pointer;display:flex;align-items:center;gap:8px;white-space:nowrap}
+.btn:hover{filter:brightness(1.1)} .btn:disabled{opacity:.5;cursor:not-allowed}
+.sp{width:16px;height:16px;border:2px solid rgba(10,22,40,0.3);border-top-color:var(--navy);border-radius:50%;animation:spin .7s linear infinite;display:none}
+@keyframes spin{to{transform:rotate(360deg)}}
+#res{display:none}
+.badge{padding:3px 12px;border-radius:2px;font-family:Rajdhani,sans-serif;font-size:11px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase}
+.bok{background:rgba(61,184,122,.15);color:var(--success);border:1px solid rgba(61,184,122,.3)}
+.berr{background:rgba(224,80,80,.15);color:var(--danger);border:1px solid rgba(224,80,80,.3)}
+.pgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(175px,1fr))}
+.dato{padding:14px 20px;border-right:1px solid var(--border);border-bottom:1px solid var(--border)}
+.dlabel{font-size:10px;font-weight:600;color:var(--gray);letter-spacing:1.5px;text-transform:uppercase;margin-bottom:4px}
+.dval{font-family:Rajdhani,sans-serif;font-size:20px;font-weight:700}
+.dval.puntos{color:var(--gold-bright);font-size:28px}
+.dval.vencido{color:var(--danger)} .dval.vigente{color:var(--success)}
+.ttitle{font-family:Rajdhani,sans-serif;font-size:13px;font-weight:700;color:var(--gold);letter-spacing:2px;text-transform:uppercase;margin:20px 0 12px;display:flex;align-items:center;gap:10px}
+.cbadge{background:rgba(212,160,23,.2);color:var(--gold);border:1px solid rgba(212,160,23,.4);border-radius:10px;padding:1px 10px;font-size:12px}
+.twrap{overflow-x:auto}
+table{width:100%;border-collapse:collapse;font-size:13px}
+thead th{background:rgba(212,160,23,.12);border-bottom:2px solid rgba(212,160,23,.3);padding:9px 13px;font-family:Rajdhani,sans-serif;font-size:10px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--gold);text-align:left;white-space:nowrap}
+tbody tr{border-bottom:1px solid rgba(255,255,255,.05)} tbody tr:hover{background:rgba(212,160,23,.05)}
+tbody td{padding:9px 13px}
+.dbg{margin-top:18px;background:rgba(0,0,0,.3);border:1px solid rgba(212,160,23,.12);border-radius:3px}
+.dtog{padding:9px 14px;font-size:10px;font-weight:600;color:var(--gray);letter-spacing:1px;text-transform:uppercase;cursor:pointer}
+.dtog:hover{color:var(--gold)}
+.dcont{display:none;padding:12px 14px;border-top:1px solid rgba(212,160,23,.1)}
+.dcont pre{font-family:'Courier New',monospace;font-size:10px;color:#8aa0b8;white-space:pre-wrap;word-break:break-all;max-height:280px;overflow-y:auto}
+.nodata{text-align:center;padding:28px;color:var(--gray);font-size:13px;font-style:italic}
+footer{text-align:center;padding:18px;font-size:10px;color:rgba(138,160,184,.45)}
+</style>
+</head>
+<body>
+<header>
+  <div class="shield">CTE</div>
+  <div><h1>Consulta de Licencias ANT</h1><p>Comision de Transito del Ecuador &mdash; Distrito Pedro Carbo</p></div>
+</header>
+<main>
+  <div class="card">
+    <div class="stitle">Datos de Consulta</div>
+    <div class="frow">
+      <div><label>Tipo</label>
+        <select id="tipo">
+          <option value="CED" selected>Cedula</option>
+          <option value="RUC">RUC</option>
+          <option value="PAS">Pasaporte</option>
+          <option value="PLA">Placa</option>
+        </select></div>
+      <div><label>Numero de Identificacion</label>
+        <input type="text" id="nid" placeholder="Ej: 0912345678" maxlength="13" autocomplete="off"></div>
+      <div><label>&nbsp;</label>
+        <button class="btn" id="btn" onclick="consultar()">
+          <div class="sp" id="sp"></div><span id="btxt">Consultar</span>
+        </button></div>
+    </div>
+  </div>
+  <div id="res">
+    <div style="display:flex;align-items:center;gap:12px;margin-bottom:18px">
+      <div class="badge bok" id="sb">OK</div>
+      <span id="sm" style="font-size:13px;color:var(--gray)"></span>
+    </div>
+    <div class="card" id="pc" style="padding:0;overflow:hidden">
+      <div style="background:linear-gradient(90deg,rgba(212,160,23,.2),transparent);border-bottom:1px solid var(--border);padding:12px 20px;font-family:Rajdhani,sans-serif;font-size:12px;font-weight:700;color:var(--gold);letter-spacing:2px;text-transform:uppercase">Datos del Conductor</div>
+      <div class="pgrid" id="pg"></div>
+    </div>
+    <div id="cs">
+      <div class="ttitle">Citaciones / Infracciones <span class="cbadge" id="tc">0</span></div>
+      <div class="twrap"><div id="tb"></div></div>
+    </div>
+    <div class="dbg">
+      <div class="dtog" onclick="tDbg()">&#9881; Diagnostico tecnico (click para ver)</div>
+      <div class="dcont" id="dc"><pre id="dp"></pre></div>
+    </div>
+  </div>
+</main>
+<footer>CTE Distrito Pedro Carbo | Jefatura Provincial del Guayas | v1.0</footer>
+<script>
+document.getElementById('nid').addEventListener('keypress',function(e){if(e.key==='Enter')consultar();});
+async function consultar(){
+  var tipo=document.getElementById('tipo').value,id=document.getElementById('nid').value.trim();
+  if(!id){alert('Ingresa el numero de identificacion');return;}
+  busy(true);document.getElementById('res').style.display='none';
+  try{var r=await fetch(location.origin+'/api/consulta?tipo='+encodeURIComponent(tipo)+'&identificacion='+encodeURIComponent(id));var d=await r.json();render(d);}
+  catch(e){rErr('Error: '+e.message);}finally{busy(false);}
+}
+function busy(on){document.getElementById('btn').disabled=on;document.getElementById('sp').style.display=on?'block':'none';document.getElementById('btxt').textContent=on?'Consultando...':'Consultar';}
+function render(d){
+  document.getElementById('res').style.display='block';
+  if(!d.success){sS('berr','ERROR',d.error||'No encontrado');document.getElementById('pc').style.display='none';document.getElementById('cs').style.display='none';document.getElementById('dp').textContent=JSON.stringify(d,null,2);return;}
+  sS('bok','OK','Consulta por '+d.tipo_consulta+': '+d.identificacion);
+  document.getElementById('pc').style.display='';document.getElementById('cs').style.display='';
+  var p=d.persona||{};
+  var c=[{k:'nombre',l:'Nombre Completo',c:''},{k:'cedula',l:'Cedula',c:''},{k:'tipo_licencia',l:'Tipo Licencia',c:''},{k:'fecha_caducidad',l:'Fecha Caducidad',c:ef(p.fecha_caducidad)},{k:'puntos',l:'Puntos Vigentes',c:'puntos'}];
+  document.getElementById('pg').innerHTML=c.map(function(f){return'<div class="dato"><div class="dlabel">'+f.l+'</div><div class="dval '+f.c+'">'+(p[f.k]||'<span style="color:var(--gray);font-size:13px">&#8212;</span>')+'</div></div>';}).join('');
+  var ci=d.citaciones||[];document.getElementById('tc').textContent=ci.length;
+  var t=document.getElementById('tb');
+  if(!ci.length){t.innerHTML='<div class="nodata">Sin citaciones registradas</div>';}
+  else{var s=ci[0];var k=s.datos?s.datos.map(function(_,i){return'Col '+(i+1);}):Object.keys(s);t.innerHTML='<table><thead><tr>'+k.map(function(x){return'<th>'+x+'</th>';}).join('')+'</tr></thead><tbody>'+ci.map(function(r){var v=r.datos||Object.values(r);return'<tr>'+v.map(function(x){return'<td>'+(x||'')+'</td>';}).join('')+'</tr>';}).join('')+'</tbody></table>';}
+  document.getElementById('dp').textContent=JSON.stringify(d._debug,null,2);
+}
+function rErr(msg){document.getElementById('res').style.display='block';sS('berr','ERROR',msg);document.getElementById('pc').style.display='none';document.getElementById('cs').style.display='none';}
+function sS(cls,txt,msg){document.getElementById('sb').className='badge '+cls;document.getElementById('sb').textContent=txt;document.getElementById('sm').textContent=msg;}
+function ef(f){if(!f)return'';var m=f.match(/(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})/);if(!m)return'';return new Date(m[3],m[2]-1,m[1])<new Date()?'vencido':'vigente';}
+function tDbg(){var c=document.getElementById('dc');c.style.display=c.style.display==='block'?'none':'block';}
+</script>
+</body>
+</html>
