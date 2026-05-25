@@ -1,5 +1,5 @@
 // ============================================================
-// ANT Licencias API — server.js  (versión completa con PLACA)
+// ANT Licencias API — server.js  (version final)
 // Render.com compatible — Node.js 18+ sin Puppeteer
 // ============================================================
 
@@ -16,29 +16,25 @@ const app  = express();
 const PORT = process.env.PORT || 3000;
 const BASE = 'https://sistematransito.ant.gob.ec/PortalWEB/paginas/clientes';
 
-// ── Ruta raíz explícita ────────────────────────────────────────
+
+// Ruta explicita por si el static falla
 app.get('/', (req, res) => {
   res.sendFile(path.join(process.cwd(), 'public', 'index.html'));
 });
 
 app.use(cors());
 app.use(express.json());
+// DESPUÉS — ruta absoluta más robusta:
 app.use(express.static(path.join(process.cwd(), 'public')));
 
-// ══════════════════════════════════════════════════════════════
-// HELPERS
-// ══════════════════════════════════════════════════════════════
+// ── Helpers ───────────────────────────────────────────────────
 
-/**
- * Crea un cliente axios con cookie jar dedicado por sesión.
- * Cada consulta usa su propia sesión para evitar conflictos.
- */
 function crearCliente() {
   const jar = new CookieJar();
   return wrapper(axios.create({
     jar,
     withCredentials: true,
-    timeout: 25000,
+    timeout: 20000,
     headers: {
       'User-Agent'     : 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124.0 Safari/537.36',
       'Accept-Language': 'es-EC,es;q=0.9,en;q=0.7',
@@ -48,38 +44,15 @@ function crearCliente() {
   }));
 }
 
-/**
- * Decodifica buffer ISO-8859-1 — para páginas HTML del portal ANT.
- */
 function dec(data) {
   return Buffer.isBuffer(data) ? iconv.decode(data, 'ISO-8859-1') : String(data);
 }
 
-/**
- * Decodifica buffer para respuestas JSON del portal ANT.
- * Intenta UTF-8 primero; si el JSON no parsea, cae a ISO-8859-1.
- * Resuelve el bug de "encontrÃ³" (doble encoding).
- */
-function decJson(data) {
-  if (!Buffer.isBuffer(data)) return String(data);
-  // Intento 1 — UTF-8 (lo más común en endpoints JSON modernos)
-  const utf8 = data.toString('utf8');
-  try { JSON.parse(utf8); return utf8; } catch { /* sigue */ }
-  // Intento 2 — ISO-8859-1 (fallback para JSPs legacy)
-  return iconv.decode(data, 'ISO-8859-1');
-}
-
-// ══════════════════════════════════════════════════════════════
-// PARSER — PERSONA (cédula / RUC / pasaporte)
-// ══════════════════════════════════════════════════════════════
-
-/**
- * Extrae datos del conductor desde el HTML de clp_grid_citaciones.jsp
- * Selectores confirmados con HTML real del portal:
- *   td.titulo1        → nombre (1er td) y puntos (td con solo dígitos)
- *   td.MarcoTitulo    → cédula  "CED - XXXXXXXXXX"
- *   td.detalle_formulario → "LICENCIA TIPO: C  / VALIDEZ: 17-09-2024 - 16-09-2029"
- */
+// ── parsearPersona ─────────────────────────────────────────────
+// Selectores CSS reales del portal (confirmados con HTML real):
+//   td.titulo1            → nombre (1er td) y puntos (td con solo digitos)
+//   td.MarcoTitulo        → cedula  "CED - XXXXXXXXXX"
+//   td.detalle_formulario → "LICENCIA TIPO: C  / VALIDEZ: 17-09-2024 - 16-09-2029"
 function parsearPersona($) {
   const p = {};
 
@@ -87,20 +60,21 @@ function parsearPersona($) {
   const nombreTxt = $('td.titulo1').first().text().replace(/\s+/g, ' ').trim();
   if (nombreTxt) p.nombre = nombreTxt;
 
-  // PUNTOS — td.titulo1 cuyo texto es solo dígitos
+  // PUNTOS — td.titulo1 cuyo texto es solo digitos
   $('td.titulo1').each((_, td) => {
     const txt = $(td).text().replace(/\s+/g, ' ').trim();
     if (/^\d+$/.test(txt)) p.puntos = txt;
   });
 
-  // CÉDULA / RUC / PASAPORTE — td.MarcoTitulo "CED - XXXXXXXXXX"
+  // CEDULA — td.MarcoTitulo que contiene "CED - XXXXXXXXXX"
   $('td.MarcoTitulo').each((_, td) => {
     const txt = $(td).text().replace(/[\s\u00A0]+/g, ' ').trim();
     const m = txt.match(/(?:CED|RUC|PAS|PLA)\s*[-\u2013]\s*(\w+)/i);
     if (m) p.cedula = m[1];
   });
 
-  // LICENCIAS — array (puede haber varias: A, B, C, D, E…)
+  // LICENCIAS — array (una persona puede tener varias: A, B, C, D, E...)
+  // Cada td.detalle_formulario con "LICENCIA TIPO" es una licencia distinta
   // HTML: "LICENCIA TIPO: A  / VALIDEZ: 23-01-2025 - 22-01-2030"
   p.licencias = [];
 
@@ -111,7 +85,7 @@ function parsearPersona($) {
       .replace(/\s+/g, ' ')
       .trim();
 
-    if (!/LICENCIA\s+TIPO/i.test(txt)) return;
+    if (!/LICENCIA\s+TIPO/i.test(txt)) return; // saltar filas vacias o de otro tipo
 
     const lic = {};
 
@@ -133,7 +107,8 @@ function parsearPersona($) {
     if (lic.tipo) p.licencias.push(lic);
   });
 
-  // Atajos de compatibilidad para frontends que usan campos raíz
+  // Atajos de compatibilidad: primera licencia como campos raiz
+  // (por si el frontend los usa directamente)
   if (p.licencias.length > 0) {
     p.tipo_licencia   = p.licencias.map(l => l.tipo).join(' / ');
     p.fecha_caducidad = p.licencias[0].fecha_caducidad || '';
@@ -142,191 +117,54 @@ function parsearPersona($) {
   return p;
 }
 
-// ══════════════════════════════════════════════════════════════
-// PARSER — VEHÍCULO (placa)
-// ══════════════════════════════════════════════════════════════
+// ── detectarUrlGrid ────────────────────────────────────────────
+// Busca clp_json_citaciones.jsp con sus params embebidos.
+// Excluye JSPs secundarios: impresiones, detalles, puntos, etc.
+function detectarUrlGrid(js) {
+  // Busqueda directa por nombre exacto
+  const reDirecta = /url\s*:\s*'(clp_json_citaciones\.jsp[^']*)'/i;
+  const mDirecta  = reDirecta.exec(js);
+  if (mDirecta) return mDirecta[1];
 
-/**
- * Extrae datos del vehículo desde el HTML de clp_grid_citaciones.jsp?tipo=PLA
- *
- * Estructura REAL confirmada con HTML del portal:
- *   td.titulo2 > strong     → placa  "GTO8639"
- *   td.titulo               → label  ("Marca:", "Modelo:", etc.)
- *   td.detalle_formulario   → valor  ("SUZUKI", "SWIFT ISG…", etc.)
- *
- * Pares label/valor en orden de aparición en el HTML:
- *   Fila 1: Marca | Color | Año de Matrícula
- *   Fila 2: Modelo | Clase | Fecha de Matrícula
- *   Fila 3: Año | Servicio | Fecha de Caducidad
- *   Fila 4: Polarizado | Fecha Caducidad (polarizado)
- *
- * Además extrae ps_id_persona y ps_id_contrato de los iframes
- * para poder encadenar la consulta de propietario/puntos.
- */
-function parsearVehiculo($) {
-  const v = {};
-
-  // PLACA — td.titulo2 > strong
-  const placaTxt = $('td.titulo2 strong').first().text().trim();
-  if (placaTxt) v.placa = placaTxt;
-
-  // Construir arrays paralelos de labels y valores
-  const labels = [];
-  const values = [];
-
-  $('td.titulo').each((_, td) => {
-    labels.push(
-      $(td).text()
-        .replace(/\u00A0/g, ' ')
-        .replace(/\s+/g, ' ')
-        .trim()
-        .replace(/:$/, '')
-        .toLowerCase()
-        // normalizar tildes para matching robusto
-        .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
-    );
-  });
-
-  $('td.detalle_formulario').each((_, td) => {
-    values.push(
-      $(td).text()
-        .replace(/\u00A0/g, ' ')
-        .replace(/\s+/g, ' ')
-        .trim()
-    );
-  });
-
-  // Tabla de mapeo: label normalizado → campo de salida
-  const mapaLabels = {
-    'marca'                  : 'marca',
-    'modelo'                 : 'modelo',
-    'color'                  : 'color',
-    'clase'                  : 'clase',
-    'ano'                    : 'anio',
-    'servicio'               : 'servicio',
-    'ano de matricula'       : 'anio_matricula',
-    'fecha de matricula'     : 'fecha_matricula',
-    'fecha de caducidad'     : 'fecha_caducidad_matricula',
-    'polarizado'             : 'polarizado',
-    'fecha caducidad'        : 'fecha_caducidad_polarizado',
-  };
-
-  labels.forEach((label, i) => {
-    const campo = mapaLabels[label];
-    if (campo && values[i] !== undefined) {
-      v[campo] = values[i];
+  // Fallback excluyendo secundarios
+  const excluir = /impresion|imprimir|detalles_cit|pagina_blanca|puntos|auditoria|estado_cuenta|export|print/i;
+  const re = /url\s*:\s*['"]([^'"]*\.jsp[^'"]*)['"]/gi;
+  let m;
+  while ((m = re.exec(js)) !== null) {
+    const u = m[1].trim();
+    if (!excluir.test(u) && !u.includes('css') && !u.includes('jquery') && !u.includes('http')) {
+      return u;
     }
-  });
-
-  // IDs internos embebidos en los iframes — útiles para consultas encadenadas
-  // src="clp_estado_cuenta.jsp?ps_persona=74270169&ps_id_contrato=703798498..."
-  // src="clp_grid_puntos.jsp?ps_id_persona=74270169"
-  const html = $.html();
-
-  const mPersona  = html.match(/ps_id_persona=(\d+)/);
-  const mPersona2 = html.match(/ps_persona=(\d+)/);
-  const mContrato = html.match(/ps_id_contrato=(\d+)/);
-
-  if (mPersona)  v._id_persona  = mPersona[1];
-  else if (mPersona2) v._id_persona = mPersona2[1];
-  if (mContrato) v._id_contrato = mContrato[1];
-
-  return v;
-}
-
-// ══════════════════════════════════════════════════════════════
-// CONSULTA ADICIONAL — Propietario y puntos por id_persona
-// ══════════════════════════════════════════════════════════════
-
-/**
- * Hace una segunda petición a clp_grid_puntos.jsp para obtener
- * nombre del propietario y saldo de puntos cuando consultamos por placa.
- * No es crítica — si falla se retorna el vehículo sin propietario.
- */
-async function consultarPropietario(client, idPersona) {
-  try {
-    const res = await client.get(`${BASE}/clp_grid_puntos.jsp`, {
-      params: { ps_id_persona: idPersona },
-      responseType: 'arraybuffer',
-      headers: { Accept: 'text/html,application/xhtml+xml' }
-    });
-    const $p = cheerio.load(dec(res.data));
-
-    const propietario = {};
-
-    // Nombre — primer td.titulo1
-    const nombre = $p('td.titulo1').first().text().replace(/\s+/g, ' ').trim();
-    if (nombre) propietario.nombre = nombre;
-
-    // Puntos — td.titulo1 con solo dígitos
-    $p('td.titulo1').each((_, td) => {
-      const txt = $p(td).text().replace(/\s+/g, ' ').trim();
-      if (/^\d+$/.test(txt)) propietario.puntos = txt;
-    });
-
-    // Cédula — td.MarcoTitulo "CED - XXXXXXXXXX"
-    $p('td.MarcoTitulo').each((_, td) => {
-      const txt = $p(td).text().replace(/[\s\u00A0]+/g, ' ').trim();
-      const m = txt.match(/(?:CED|RUC|PAS)\s*[-\u2013]\s*(\w+)/i);
-      if (m) propietario.cedula = m[1];
-    });
-
-    return propietario;
-  } catch (err) {
-    console.warn('[ANT API] No se pudo obtener propietario:', err.message);
-    return null;
   }
+  return null;
 }
 
-// ══════════════════════════════════════════════════════════════
-// GET /api/consulta
-// ══════════════════════════════════════════════════════════════
+// ── GET /api/consulta ──────────────────────────────────────────
 
-/**
- * Parámetros:
- *   identificacion  → cédula / RUC / pasaporte / placa
- *   tipo            → CED (default) | RUC | PAS | PLA
- *
- * Ejemplos:
- *   /api/consulta?identificacion=1712345678&tipo=CED
- *   /api/consulta?identificacion=GTO8639&tipo=PLA
- */
 app.get('/api/consulta', async (req, res) => {
   const { identificacion, tipo = 'CED' } = req.query;
 
   if (!identificacion) {
-    return res.status(400).json({
-      success: false,
-      error  : 'Parámetro identificacion requerido'
-    });
+    return res.status(400).json({ success: false, error: 'Parametro identificacion requerido' });
   }
 
-  const tipos = {
-    CED: 'Cedula',
-    RUC: 'RUC',
-    PAS: 'Pasaporte',
-    PLA: 'Placa'
-  };
-
+  const tipos = { CED: 'Cedula', RUC: 'RUC', PAS: 'Pasaporte', PLA: 'Placa' };
   if (!tipos[tipo]) {
-    return res.status(400).json({
-      success: false,
-      error  : 'Tipo inválido. Usa: CED, RUC, PAS, PLA'
-    });
+    return res.status(400).json({ success: false, error: 'Tipo invalido. Usa: CED, RUC, PAS, PLA' });
   }
 
   const client = crearCliente();
 
   try {
 
-    // ── PASO 1: Obtener JSESSIONID (cookie de sesión Tomcat) ──────
+    // PASO 1 — Sesion: obtiene JSESSIONID de Tomcat
     await client.get(`${BASE}/clp_criterio_consulta.jsp`, {
       responseType: 'arraybuffer',
       headers: { Accept: 'text/html,application/xhtml+xml' }
     });
 
-    // ── PASO 2: Validar persona/placa vía AJAX interno ────────────
-    // POST clp_json_consulta_persona.jsp
+    // PASO 2 — Validar persona via AJAX interno
+    // POST clp_json_consulta_persona.jsp?ps_tipo_identificacion=CED&ps_identificacion=XXXX
     // Responde: {"mensaje":"OK"} o {"mensaje":"<error>"}
     const valRes = await client.post(
       `${BASE}/clp_json_consulta_persona.jsp`,
@@ -345,89 +183,58 @@ app.get('/api/consulta', async (req, res) => {
       }
     );
 
-    const valText = decJson(valRes.data).trim();
+    const valText = dec(valRes.data).trim();
     let valJson = {};
-    try   { valJson = JSON.parse(valText); }
-    catch { valJson = { mensaje: valText }; }
+    try { valJson = JSON.parse(valText); } catch { valJson = { mensaje: valText }; }
 
     if (valJson.mensaje !== 'OK') {
       return res.json({
         success: false,
-        error  : valJson.mensaje || 'Registro no encontrado'
+        error  : valJson.mensaje || 'Persona no encontrada'
       });
     }
 
-    // ── PASO 3: Obtener página del grid con todos los datos ───────
-    // GET clp_grid_citaciones.jsp?ps_tipo_identificacion=PLA&ps_identificacion=GTO8639&ps_placa=
+    // PASO 3 — Pagina del grid
+    // GET clp_grid_citaciones.jsp?ps_tipo_identificacion=CED&ps_identificacion=XXXX&ps_placa=
     const gridRes = await client.get(`${BASE}/clp_grid_citaciones.jsp`, {
       params: {
         ps_tipo_identificacion: tipo,
         ps_identificacion     : identificacion,
-        ps_placa              : tipo === 'PLA' ? identificacion : ''
+        ps_placa              : ''
       },
       responseType: 'arraybuffer',
       headers: {
-        Accept  : 'text/html,application/xhtml+xml',
-        Referer : `${BASE}/clp_criterio_consulta.jsp`
+        Accept : 'text/html,application/xhtml+xml',
+        Referer: `${BASE}/clp_criterio_consulta.jsp`
       }
     });
 
-    const gridHtml = dec(gridRes.data);
+   const gridHtml = dec(gridRes.data);
     const $        = cheerio.load(gridHtml);
 
-    // ── PASO 4: Parsear según tipo de consulta ────────────────────
+    // Extraer datos del conductor
+    const persona = parsearPersona($);
 
-    if (tipo === 'PLA') {
-
-      // Datos del vehículo
-      const vehiculo = parsearVehiculo($);
-
-      // Propietario (segunda petición encadenada, no crítica)
-      let propietario = null;
-      if (vehiculo._id_persona) {
-        propietario = await consultarPropietario(client, vehiculo._id_persona);
-      }
-
-      return res.json({
-        success      : true,
-        tipo_consulta: 'Placa',
-        identificacion,
-        vehiculo,
-        propietario  : propietario || {}
-      });
-
-    } else {
-
-      // Datos del conductor
-      const persona = parsearPersona($);
-
-      return res.json({
-        success      : true,
-        tipo_consulta: tipos[tipo],
-        identificacion,
-        persona
-      });
-    }
+    // Respuesta final — solo datos del conductor
+    return res.json({
+      success      : true,
+      tipo_consulta: tipos[tipo],
+      identificacion,
+      persona
+    });
+   
 
   } catch (err) {
     console.error('[ANT API]', err.message);
     return res.status(500).json({
       success: false,
       error  : err.message,
-      hint   : 'Verifica conectividad al servidor ANT o que el identificador sea válido'
+      hint   : 'Verifica conectividad al servidor ANT o que el identificador sea valido'
     });
   }
 });
 
-// ══════════════════════════════════════════════════════════════
-// Health check (para Render.com / uptime monitors)
-// ══════════════════════════════════════════════════════════════
-app.get('/health', (_, res) => res.json({
-  status: 'ok',
-  ts    : new Date().toISOString()
-}));
+// ── Health check para Render ───────────────────────────────────
+app.get('/health', (_, res) => res.json({ status: 'ok', ts: new Date().toISOString() }));
 
-// ══════════════════════════════════════════════════════════════
-// Start
-// ══════════════════════════════════════════════════════════════
 app.listen(PORT, () => console.log(`ANT Licencias API — Puerto ${PORT}`));
