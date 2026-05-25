@@ -49,10 +49,24 @@ function crearCliente() {
 }
 
 /**
- * Decodifica buffer ISO-8859-1 (encoding del portal ANT).
+ * Decodifica buffer ISO-8859-1 — para páginas HTML del portal ANT.
  */
 function dec(data) {
   return Buffer.isBuffer(data) ? iconv.decode(data, 'ISO-8859-1') : String(data);
+}
+
+/**
+ * Decodifica buffer para respuestas JSON del portal ANT.
+ * Intenta UTF-8 primero; si el JSON no parsea, cae a ISO-8859-1.
+ * Resuelve el bug de "encontrÃ³" (doble encoding).
+ */
+function decJson(data) {
+  if (!Buffer.isBuffer(data)) return String(data);
+  // Intento 1 — UTF-8 (lo más común en endpoints JSON modernos)
+  const utf8 = data.toString('utf8');
+  try { JSON.parse(utf8); return utf8; } catch { /* sigue */ }
+  // Intento 2 — ISO-8859-1 (fallback para JSPs legacy)
+  return iconv.decode(data, 'ISO-8859-1');
 }
 
 // ══════════════════════════════════════════════════════════════
@@ -331,7 +345,7 @@ app.get('/api/consulta', async (req, res) => {
       }
     );
 
-    const valText = dec(valRes.data).trim();
+    const valText = decJson(valRes.data).trim();
     let valJson = {};
     try   { valJson = JSON.parse(valText); }
     catch { valJson = { mensaje: valText }; }
